@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Учёт товаров Avito</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ЭКРАН ВХОДА -->
+<div id="auth-screen" style="max-width: 400px; margin: 50px auto; padding: 20px;">
+  <div class="card">
+    <h2 style="text-align: center;" id="auth-title">Вход в Avito Sbor</h2>
+
+    <form id="auth-form">
+      <label style="margin-bottom: 12px;">Email
+        <input type="email" id="auth-email" required placeholder="you@example.com">
+      </label>
+      <label style="margin-bottom: 12px;">Пароль
+        <input type="password" id="auth-password" required placeholder="••••••••">
+      </label>
+
+      <!-- Поле для группы (показывается только при регистрации) -->
+      <div id="group-field" style="display: none; margin-bottom: 12px;">
+        <label>Код группы (если есть)
+          <input type="text" id="auth-group-code" placeholder="Например: A7B-4C9">
+        </label>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+          Если вы создаете новую группу — оставьте поле пустым. Если вас пригласили — введите код.
+        </p>
+      </div>
+
+      <button type="submit" class="btn primary" id="btn-login" style="width:100%; margin-bottom:8px;">Войти</button>
+      <button type="button" class="btn ghost" id="btn-register" style="width:100%;">Зарегистрироваться</button>
+      <button type="button" class="btn ghost" id="btn-switch-mode" style="width:100%; margin-top:8px; border:none; background:none; color:var(--accent); text-decoration:underline;">У меня нет аккаунта</button>
+
+      <p id="auth-error" style="color: var(--danger); font-size: 13px; margin-top: 10px; text-align: center;"></p>
+    </form>
+  </div>
+</div>
+
+<!-- ОСНОВНОЙ САЙТ -->
+<div id="app-screen" style="display: none;">
+  <header>
+    <div style="display: flex; align-items: center; gap: 20px;">
+      <h1 style="margin:0;">📦 Avito Sbor</h1>
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="inventory">Товары и Сборки</button>
+        <button class="tab-btn" data-tab="accounting">💰 Бухгалтерия</button>
+      </nav>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <span id="group-info" style="font-size: 13px; color: var(--header-text); opacity: 0.8;"></span>
+      <button id="btn-global-search" class="btn ghost">🔍 Поиск (Ctrl+Shift+S)</button>
+      <button id="theme-toggle" class="btn ghost" title="Сменить тему">🌙 Тёмная</button>
+      <button id="btn-logout" class="btn ghost" style="color: var(--danger);">Выйти</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ВКЛАДКА 1: ТОВАРЫ И СБОРКИ -->
+    <div id="tab-inventory" class="tab-content active">
+      <section class="card">
+        <h2>Добавить товар вручную</h2>
+        <form id="add-form">
+          <div class="form-row">
+            <label>Ссылка на Avito <input type="url" id="url" placeholder="https://www.avito.ru/..." required></label>
+            <label>Название <input type="text" id="title" placeholder="Название товара" required></label>
+          </div>
+          <div class="form-row">
+            <label>Цена (₽) <input type="number" id="price" placeholder="0" min="0" required></label>
+            <label>Состояние
+              <select id="status">
+                <option value="pending">На согласовании</option>
+                <option value="transit">В пути</option>
+                <option value="warehouse">На складе</option>
+                <option value="sale">В продаже</option>
+                <option value="sold">Продано</option>
+              </select>
+            </label>
+            <label>Картинка (URL) <input type="url" id="image" placeholder="https://.../photo.jpg"></label>
+          </div>
+          <div class="form-row">
+            <label>Заметка (необязательно) <input type="text" id="note" placeholder="Например: гарантия 2 недели, скол на радиаторе"></label>
+          </div>
+          <button type="submit" class="btn primary">Добавить в базу</button>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Товары <span id="count" class="badge">0</span></h2>
+        <div class="filters">
+          <input type="text" id="search" placeholder="🔍 Поиск по названию...">
+          <select id="filter-category">
+            <option value="">Все категории</option>
+            <option value="Материнская плата">Материнская плата</option>
+            <option value="Процессор">Процессор</option>
+            <option value="Видеокарта">Видеокарта</option>
+            <option value="Оперативная память">Оперативная память</option>
+            <option value="Накопитель">Накопитель (SSD/HDD)</option>
+            <option value="Блок питания">Блок питания</option>
+            <option value="Корпус">Корпус</option>
+            <option value="Охлаждение">Охлаждение</option>
+            <option value="Ноутбук">Ноутбук</option>
+            <option value="Телефон">Телефон</option>
+            <option value="Другое">Другое</option>
+          </select>
+          <select id="filter-status">
+            <option value="">Все состояния</option>
+            <option value="pending">На согласовании</option>
+            <option value="transit">В пути</option>
+            <option value="warehouse">На складе</option>
+            <option value="sale">В продаже</option>
+            <option value="sold">Продано</option>
+          </select>
+          <label class="toggle-checkbox"><input type="checkbox" id="hide-in-sets" checked> Скрыть те, что в сборках</label>
+          <button id="clear-sold" class="btn danger">Удалить все «Продано»</button>
+        </div>
+        <div id="items-list"></div>
+        <p id="empty-msg" class="empty">Пока нет добавленных товаров</p>
+      </section>
+
+      <section class="card">
+        <h2>Сборки <span id="sets-count" class="badge">0</span></h2>
+        <div id="sets-list"></div>
+        <p id="sets-empty-msg" class="empty">Нет созданных сборок</p>
+      </section>
+    </div>
+
+    <!-- ВКЛАДКА 2: БУХГАЛТЕРИЯ -->
+    <div id="tab-accounting" class="tab-content">
+      <section class="card" style="border: 2px solid var(--accent);">
+        <h2>📊 Аналитика</h2>
+        <div class="finance-summary" style="grid-template-columns: repeat(3, 1fr);">
+          <div class="fin-box" style="background: var(--card-bg);">
+            <div class="fin-label">Свободные средства</div>
+            <div class="fin-value" id="an-free" style="color: var(--success);">0 ₽</div>
+          </div>
+          <div class="fin-box" style="background: var(--card-bg);">
+            <div class="fin-label">Заморожено в товарах</div>
+            <div class="fin-value" id="an-frozen" style="color: var(--accent);">0 ₽</div>
+          </div>
+          <div class="fin-box" style="background: var(--card-bg);">
+            <div class="fin-label">Прибыль за 30 дней</div>
+            <div class="fin-value" id="an-profit" style="color: var(--success);">0 ₽</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Финансы группы</h2>
+        <div class="finance-summary">
+          <div class="fin-box">
+            <div class="fin-label">Общий капитал (В кассах)</div>
+            <div class="fin-value" id="fin-total">0 ₽</div>
+          </div>
+          <div class="fin-box">
+            <div class="fin-label">Всего вложено партнерами</div>
+            <div class="fin-value" id="fin-invested">0 ₽</div>
+          </div>
+          <div class="fin-box">
+            <div class="fin-label">Всего выведено</div>
+            <div class="fin-value" id="fin-withdrawn">0 ₽</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Участники</h2>
+        <div id="partners-list" class="partners-list"></div>
+
+        <h3 style="margin-top: 20px; font-size: 16px;">Управление средствами</h3>
+        <div class="form-row" style="align-items: flex-end;">
+          <label>Партнер
+            <select id="acc-partner">
+              <option value="p_1">Партнер 1</option>
+              <option value="p_2">Партнер 2</option>
+            </select>
+          </label>
+          <label>Сумма (₽) <input type="number" id="acc-amount" placeholder="0" min="1"></label>
+          <label>Комментарий <input type="text" id="acc-comment" placeholder="Например: Внесли наличку"></label>
+          <div style="display:flex; gap:8px;">
+            <button id="btn-deposit" class="btn primary">Внести в кассу</button>
+            <button id="btn-withdraw" class="btn danger">Вывести</button>
+            <button id="btn-adjust" class="btn ghost" title="Ручная правка баланса партнера">Правка</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>История операций</h2>
+        <div class="table-wrapper">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Дата</th>
+                <th>Тип</th>
+                <th>Партнер</th>
+                <th>Сумма</th>
+                <th>Комментарий</th>
+              </tr>
+            </thead>
+            <tbody id="history-list"></tbody>
+          </table>
+        </div>
+        <p id="history-empty" class="empty">История пуста</p>
+      </section>
+    </div>
+  </main>
+
+  <div id="build-panel" class="build-panel hidden">
+    <span id="build-info">Выбрано: 0</span>
+    <input type="text" id="build-name" placeholder="Название сборки (напр. iPhone 13)">
+    <button id="btn-create-build" class="btn primary">Создать сборку</button>
+    <button id="btn-cancel-build" class="btn ghost">Отмена</button>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО ПОИСКА -->
+  <div id="search-modal" class="modal hidden">
+    <div class="modal-content">
+      <input type="text" id="global-search-input" placeholder="Введите название товара..." autocomplete="off">
+      <div id="global-search-results" class="search-results"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
