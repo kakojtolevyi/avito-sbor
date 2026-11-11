@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, si
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, updateDoc, arrayUnion, arrayRemove, getDocs, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAlODiPchfhg1tWQXSN9Hs2RyqfHg2hc_4",
+  apiKey: "AIzaSyALDiPchfhg1tWQXSN9Hs2RyqfHg2hc_4",
   authDomain: "avito-sbor.firebaseapp.com",
   projectId: "avito-sbor",
   storageBucket: "avito-sbor.firebasestorage.app",
@@ -24,7 +24,12 @@ const STATUSES = {
   sold:      { label: 'Продано' },
 };
 
-const PARTNERS = { p_1: { name: 'Партнер 1' }, p_2: { name: 'Партнер 2' } };
+// Партнеры теперь динамические
+let PARTNERS = {
+  p_1: { name: 'Партнер 1' },
+  p_2: { name: 'Партнер 2' }
+};
+
 const CATEGORY_KEYWORDS = [
   { keywords: ['материн', 'мать', 'mb', 'motherboard'], cat: 'Материнская плата' },
   { keywords: ['процессор', 'проц', 'cpu', 'ryzen', 'intel core', 'xeon'], cat: 'Процессор' },
@@ -48,7 +53,6 @@ let unsubSets = null;
 let unsubTrans = null;
 let currentGroupId = null;
 
-// Утилиты
 function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9);
@@ -100,7 +104,7 @@ btnSwitchMode.addEventListener('click', () => {
 
 authForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('auth-email').value;
+  const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   authError.textContent = '';
   try {
@@ -111,7 +115,7 @@ authForm.addEventListener('submit', async (e) => {
 });
 
 btnRegister.addEventListener('click', async () => {
-  const email = document.getElementById('auth-email').value;
+  const email = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
   const groupCodeInput = document.getElementById('auth-group-code').value.trim().toUpperCase();
 
@@ -127,11 +131,16 @@ btnRegister.addEventListener('click', async () => {
     if (!groupId) {
       groupId = Math.random().toString(36).substring(2, 8).toUpperCase();
       alert(`Вы создали новую группу! Ваш код для напарника: ${groupId}\n\nПередайте его партнеру, чтобы он мог присоединиться.`);
+
+      // Сразу создаем дефолтные имена для новой группы
+      await setDoc(doc(db, 'groups', groupId), {
+        partner1: 'Партнер 1',
+        partner2: 'Партнер 2'
+      });
     }
 
-    // Сохраняем пользователя с жесткой привязкой к группе
     await setDoc(doc(db, 'users', user.uid), {
-      email: user.email,
+      email: user.email.toLowerCase(),
       groupId: groupId
     });
 
@@ -144,38 +153,38 @@ btnLogout.addEventListener('click', () => {
   signOut(auth);
 });
 
-// ====== ИНИЦИАЛИЗАЦИЯ ДАННЫХ ПОСЛЕ ВХОДА ======
+// ====== СИНХРОНИЗАЦИЯ ======
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = 'none';
     appScreen.style.display = 'block';
 
     try {
-      // Ждем, пока загрузится документ пользователя, чтобы узнать его группу
-      const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', user.email)));
+      // ВАЖНО: используем .toLowerCase() для надежного поиска по email
+      const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', user.email.toLowerCase())));
 
       if (!userDoc.empty) {
         const userData = userDoc.docs[0].data();
         currentGroupId = userData.groupId;
+        localStorage.setItem('avito_groupId', currentGroupId); // Дублируем в кэш для надежности
         document.getElementById('group-info').textContent = `Группа: ${currentGroupId}`;
 
-        // Только теперь запускаем синхронизацию
         initRealtime(currentGroupId);
       } else {
-        // Если документа нет (старый аккаунт), пробуем найти группу в localStorage или создаем новую
+        // Если пользователь создан, но документа нет (старый баг), берем из кэша
         let savedGroup = localStorage.getItem('avito_groupId');
-        if (!savedGroup) {
-          savedGroup = Math.random().toString(36).substring(2, 8).toUpperCase();
-          await setDoc(doc(db, 'users', user.uid), { email: user.email, groupId: savedGroup });
+        if (savedGroup) {
+          currentGroupId = savedGroup;
+          document.getElementById('group-info').textContent = `Группа: ${currentGroupId}`;
+          initRealtime(currentGroupId);
+        } else {
+          alert('Ошибка: группа не найдена. Войдите заново.');
+          signOut(auth);
         }
-        currentGroupId = savedGroup;
-        localStorage.setItem('avito_groupId', currentGroupId);
-        document.getElementById('group-info').textContent = `Группа: ${currentGroupId}`;
-        initRealtime(currentGroupId);
       }
     } catch (err) {
-      console.error("Ошибка при загрузке пользователя:", err);
-      alert("Ошибка синхронизации. Обновите страницу.");
+      console.error("Ошибка загрузки:", err);
+      alert("Ошибка подключения к базе.");
     }
   } else {
     authScreen.style.display = 'block';
@@ -187,11 +196,22 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// ====== СЛУШАТЕЛИ БАЗЫ ДАННЫХ ======
 function initRealtime(groupId) {
   if (unsubItems) unsubItems();
   if (unsubSets) unsubSets();
   if (unsubTrans) unsubTrans();
+
+  // Слушатель имен партнеров
+  onSnapshot(doc(db, 'groups', groupId), (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      PARTNERS.p_1.name = data.partner1 || 'Партнер 1';
+      PARTNERS.p_2.name = data.partner2 || 'Партнер 2';
+      renderAccounting();
+      renderItems();
+      renderSets();
+    }
+  });
 
   unsubItems = onSnapshot(query(collection(db, 'items'), where('groupId', '==', groupId)), (snapshot) => {
     items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -215,7 +235,7 @@ function initRealtime(groupId) {
   });
 }
 
-// DOM (все элементы остаются как были)
+// DOM
 const listEl    = document.getElementById('items-list');
 const emptyMsg  = document.getElementById('empty-msg');
 const countEl   = document.getElementById('count');
@@ -340,7 +360,7 @@ function renderGlobalSearch(q) {
   });
 }
 
-// ====== ОТРИСОВКА ТОВАРОВ (Исправлена смена статуса) ======
+// ====== ОТРИСОВКА ТОВАРОВ ======
 function renderItems() {
   const q = searchEl.value.trim().toLowerCase();
   const fCat = filterCat.value;
@@ -450,23 +470,19 @@ function renderItems() {
       select.appendChild(opt);
     }
 
-    // ИСПРАВЛЕНИЕ: Логика смены статуса с записью в базу
     select.onchange = async () => {
       const oldStatus = item.status;
       const newStatus = select.value;
 
       let updates = { status: newStatus };
 
-      // Если меняем с "На согласовании" на что-то другое — это покупка
       if (oldStatus === 'pending' && newStatus !== 'pending') {
         updates.isPurchased = true;
         await setDoc(doc(collection(db, 'transactions')), {
           groupId: currentGroupId,
           date: Date.now(), type: 'purchase', partnerId: null, amount: item.price, comment: `Покупка товара "${item.title}"`
         });
-      }
-      // Если возвращаем обратно в "На согласовании" — возврат
-      else if (oldStatus !== 'pending' && newStatus === 'pending' && item.isPurchased) {
+      } else if (oldStatus !== 'pending' && newStatus === 'pending' && item.isPurchased) {
         updates.isPurchased = false;
         await setDoc(doc(collection(db, 'transactions')), {
           groupId: currentGroupId,
@@ -474,7 +490,6 @@ function renderItems() {
         });
       }
 
-      // Если товар продается вне сборки
       if (newStatus === 'sold' && oldStatus !== 'sold' && !parentSet) {
         const amountStr = prompt(`За сколько продан товар "${item.title}"?\n(Цена закупки: ${formatPrice(item.price)})`, item.price);
         if (amountStr) {
@@ -487,7 +502,7 @@ function renderItems() {
             });
           }
         } else {
-          select.value = oldStatus; // Откат, если нажали Отмена
+          select.value = oldStatus;
           return;
         }
       }
@@ -514,7 +529,7 @@ function renderItems() {
   }
 }
 
-// ====== ОТРИСОВКА СБОРОК (без изменений) ======
+// ====== ОТРИСОВКА СБОРОК ======
 function renderSets() {
   setsListEl.innerHTML = '';
   setsCountEl.textContent = sets.length;
@@ -627,10 +642,7 @@ function renderSets() {
       select.addEventListener('change', async (e) => {
         const itemId = e.target.dataset.itemId;
         const newStatus = e.target.value;
-        const item = items.find(x => x.id === itemId);
-        if (item) {
-          await updateDoc(doc(db, 'items', itemId), { status: newStatus });
-        }
+        await updateDoc(doc(db, 'items', itemId), { status: newStatus });
       });
     });
 
@@ -730,7 +742,7 @@ function renderSets() {
   }
 }
 
-// ====== ПАНЕЛЬ СБОРКИ (без изменений) ======
+// ====== ПАНЕЛЬ СБОРКИ ======
 function updateBuildPanel() {
   const count = selectedIds.size;
   buildInfo.textContent = `Выбрано: ${count}`;
@@ -760,7 +772,7 @@ btnCreateBuild.onclick = async () => {
   renderItems();
 };
 
-// ====== ДОБАВЛЕНИЕ ТОВАРА (без изменений) ======
+// ====== ДОБАВЛЕНИЕ ТОВАРА ======
 addForm.addEventListener('submit', async e => {
   e.preventDefault();
   try {
@@ -799,7 +811,7 @@ addForm.addEventListener('submit', async e => {
   }
 });
 
-// ====== ФИЛЬТРЫ (без изменений) ======
+// ====== ФИЛЬТРЫ ======
 searchEl.addEventListener('input', renderItems);
 filterCat.addEventListener('change', renderItems);
 filterEl.addEventListener('change', renderItems);
@@ -815,7 +827,7 @@ clearSold.addEventListener('click', async () => {
   }
 });
 
-// ====== БУХГАЛТЕРИЯ (без изменений) ======
+// ====== БУХГАЛТЕРИЯ ======
 function renderAccounting() {
   const balances = { p_1: 0, p_2: 0 };
   let totalDeposited = 0;
@@ -889,6 +901,30 @@ function renderAccounting() {
     `;
     partnersList.appendChild(card);
   });
+
+  // Кнопка настройки имен
+  const settingsBtn = document.createElement('button');
+  settingsBtn.className = 'btn small ghost';
+  settingsBtn.style.marginTop = '10px';
+  settingsBtn.textContent = '⚙️ Изменить имена партнеров';
+  settingsBtn.onclick = async () => {
+    const newP1 = prompt('Имя первого партнера:', PARTNERS.p_1.name);
+    if (newP1 === null) return;
+    const newP2 = prompt('Имя второго партнера:', PARTNERS.p_2.name);
+    if (newP2 === null) return;
+
+    await updateDoc(doc(db, 'groups', currentGroupId), {
+      partner1: newP1.trim() || 'Партнер 1',
+      partner2: newP2.trim() || 'Партнер 2'
+    });
+  };
+  partnersList.appendChild(settingsBtn);
+
+  // Обновляем выпадающий список партнеров в форме транзакций
+  accPartner.innerHTML = `
+    <option value="p_1">${PARTNERS.p_1.name}</option>
+    <option value="p_2">${PARTNERS.p_2.name}</option>
+  `;
 
   historyList.innerHTML = '';
   historyEmpty.style.display = transactions.length ? 'none' : 'block';
