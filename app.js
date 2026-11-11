@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, si
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, updateDoc, arrayUnion, arrayRemove, getDocs, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAlODiPchfhg1tWQXSN9Hs2RyqfHg2hc_4",
+  apiKey: "AIzaSyALDiPchfhg1tWQXSN9Hs2RyqfHg2hc_4",
   authDomain: "avito-sbor.firebaseapp.com",
   projectId: "avito-sbor",
   storageBucket: "avito-sbor.firebasestorage.app",
@@ -46,7 +46,7 @@ let editingSetId = null;
 let unsubItems = null;
 let unsubSets = null;
 let unsubTrans = null;
-let currentGroupId = null; // Группа текущего пользователя
+let currentGroupId = null;
 
 // Утилиты
 function uid() {
@@ -68,7 +68,7 @@ function getItemSet(itemId) {
   return sets.find(s => s.itemIds.includes(itemId));
 }
 
-// ====== АВТОРИЗАЦИЯ И ГРУППЫ ======
+// ====== АВТОРИЗАЦИЯ ======
 const authScreen = document.getElementById('auth-screen');
 const appScreen = document.getElementById('app-screen');
 const authForm = document.getElementById('auth-form');
@@ -119,33 +119,21 @@ btnRegister.addEventListener('click', async () => {
   if (!email || !password) return authError.textContent = 'Введите email и пароль';
 
   try {
-    // 1. Создаем пользователя
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // 2. Определяем группу
     let groupId = groupCodeInput;
 
     if (!groupId) {
-      // Если код не введен, генерируем новый (создатель группы)
       groupId = Math.random().toString(36).substring(2, 8).toUpperCase();
       alert(`Вы создали новую группу! Ваш код для напарника: ${groupId}\n\nПередайте его партнеру, чтобы он мог присоединиться.`);
-    } else {
-      // Если код введен, проверяем, существует ли такая группа
-      // (В идеале проверять на сервере, но для простоты доверяем введенному коду)
     }
 
-    // 3. Сохраняем пользователя в базу (привязка к группе)
+    // Сохраняем пользователя с жесткой привязкой к группе
     await setDoc(doc(db, 'users', user.uid), {
       email: user.email,
       groupId: groupId
     });
-
-    // Сохраняем в localStorage для быстрого доступа при перезагрузке
-    localStorage.setItem('avito_groupId', groupId);
-
-    // Обновляем UI
-    document.getElementById('group-info').textContent = `Группа: ${groupId}`;
 
   } catch (err) {
     authError.textContent = 'Ошибка: ' + err.message;
@@ -153,36 +141,41 @@ btnRegister.addEventListener('click', async () => {
 });
 
 btnLogout.addEventListener('click', () => {
-  localStorage.removeItem('avito_groupId');
   signOut(auth);
 });
 
+// ====== ИНИЦИАЛИЗАЦИЯ ДАННЫХ ПОСЛЕ ВХОДА ======
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     authScreen.style.display = 'none';
     appScreen.style.display = 'block';
 
-    // Получаем группу пользователя
-    const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', user.email)));
-    if (!userDoc.empty) {
-      const userData = userDoc.docs[0].data();
-      currentGroupId = userData.groupId;
-      localStorage.setItem('avito_groupId', currentGroupId);
-      document.getElementById('group-info').textContent = `Группа: ${currentGroupId}`;
+    try {
+      // Ждем, пока загрузится документ пользователя, чтобы узнать его группу
+      const userDoc = await getDocs(query(collection(db, 'users'), where('email', '==', user.email)));
 
-      // Загружаем данные только этой группы
-      initRealtime(currentGroupId);
-    } else {
-      // Если по какой-то причине данных нет, берем из localStorage
-      const savedGroup = localStorage.getItem('avito_groupId');
-      if (savedGroup) {
-        currentGroupId = savedGroup;
+      if (!userDoc.empty) {
+        const userData = userDoc.docs[0].data();
+        currentGroupId = userData.groupId;
         document.getElementById('group-info').textContent = `Группа: ${currentGroupId}`;
+
+        // Только теперь запускаем синхронизацию
         initRealtime(currentGroupId);
       } else {
-        alert('Ошибка: не найдена группа. Войдите заново.');
-        signOut(auth);
+        // Если документа нет (старый аккаунт), пробуем найти группу в localStorage или создаем новую
+        let savedGroup = localStorage.getItem('avito_groupId');
+        if (!savedGroup) {
+          savedGroup = Math.random().toString(36).substring(2, 8).toUpperCase();
+          await setDoc(doc(db, 'users', user.uid), { email: user.email, groupId: savedGroup });
+        }
+        currentGroupId = savedGroup;
+        localStorage.setItem('avito_groupId', currentGroupId);
+        document.getElementById('group-info').textContent = `Группа: ${currentGroupId}`;
+        initRealtime(currentGroupId);
       }
+    } catch (err) {
+      console.error("Ошибка при загрузке пользователя:", err);
+      alert("Ошибка синхронизации. Обновите страницу.");
     }
   } else {
     authScreen.style.display = 'block';
@@ -190,16 +183,16 @@ onAuthStateChanged(auth, async (user) => {
     if (unsubItems) unsubItems();
     if (unsubSets) unsubSets();
     if (unsubTrans) unsubTrans();
+    currentGroupId = null;
   }
 });
 
-// ====== ЗАГРУЗКА И СИНХРОНИЗАЦИЯ ======
+// ====== СЛУШАТЕЛИ БАЗЫ ДАННЫХ ======
 function initRealtime(groupId) {
   if (unsubItems) unsubItems();
   if (unsubSets) unsubSets();
   if (unsubTrans) unsubTrans();
 
-  // Загружаем только товары этой группы
   unsubItems = onSnapshot(query(collection(db, 'items'), where('groupId', '==', groupId)), (snapshot) => {
     items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -208,7 +201,6 @@ function initRealtime(groupId) {
     renderAccounting();
   });
 
-  // Загружаем только сборки этой группы
   unsubSets = onSnapshot(query(collection(db, 'sets'), where('groupId', '==', groupId)), (snapshot) => {
     sets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     sets.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -216,7 +208,6 @@ function initRealtime(groupId) {
     renderAccounting();
   });
 
-  // Загружаем транзакции группы
   unsubTrans = onSnapshot(query(collection(db, 'transactions'), where('groupId', '==', groupId)), (snapshot) => {
     transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     transactions.sort((a, b) => (b.date || 0) - (a.date || 0));
@@ -224,7 +215,7 @@ function initRealtime(groupId) {
   });
 }
 
-// DOM
+// DOM (все элементы остаются как были)
 const listEl    = document.getElementById('items-list');
 const emptyMsg  = document.getElementById('empty-msg');
 const countEl   = document.getElementById('count');
@@ -259,13 +250,12 @@ const accPartner = document.getElementById('acc-partner');
 const accAmount = document.getElementById('acc-amount');
 const accComment = document.getElementById('acc-comment');
 
-// Поиск
 const searchModal = document.getElementById('search-modal');
 const globalSearchInput = document.getElementById('global-search-input');
 const globalSearchResults = document.getElementById('global-search-results');
 const btnGlobalSearch = document.getElementById('btn-global-search');
 
-// ====== ТЁМНАЯ ТЕМА ======
+// ====== ТЕМА ======
 function applyTheme(theme) {
   if (theme === 'dark') {
     document.body.classList.add('dark-theme');
@@ -350,7 +340,7 @@ function renderGlobalSearch(q) {
   });
 }
 
-// ====== ОТРИСОВКА ТОВАРОВ ======
+// ====== ОТРИСОВКА ТОВАРОВ (Исправлена смена статуса) ======
 function renderItems() {
   const q = searchEl.value.trim().toLowerCase();
   const fCat = filterCat.value;
@@ -460,19 +450,23 @@ function renderItems() {
       select.appendChild(opt);
     }
 
+    // ИСПРАВЛЕНИЕ: Логика смены статуса с записью в базу
     select.onchange = async () => {
       const oldStatus = item.status;
       const newStatus = select.value;
 
       let updates = { status: newStatus };
 
+      // Если меняем с "На согласовании" на что-то другое — это покупка
       if (oldStatus === 'pending' && newStatus !== 'pending') {
         updates.isPurchased = true;
         await setDoc(doc(collection(db, 'transactions')), {
           groupId: currentGroupId,
           date: Date.now(), type: 'purchase', partnerId: null, amount: item.price, comment: `Покупка товара "${item.title}"`
         });
-      } else if (oldStatus !== 'pending' && newStatus === 'pending' && item.isPurchased) {
+      }
+      // Если возвращаем обратно в "На согласовании" — возврат
+      else if (oldStatus !== 'pending' && newStatus === 'pending' && item.isPurchased) {
         updates.isPurchased = false;
         await setDoc(doc(collection(db, 'transactions')), {
           groupId: currentGroupId,
@@ -480,6 +474,7 @@ function renderItems() {
         });
       }
 
+      // Если товар продается вне сборки
       if (newStatus === 'sold' && oldStatus !== 'sold' && !parentSet) {
         const amountStr = prompt(`За сколько продан товар "${item.title}"?\n(Цена закупки: ${formatPrice(item.price)})`, item.price);
         if (amountStr) {
@@ -492,7 +487,7 @@ function renderItems() {
             });
           }
         } else {
-          select.value = oldStatus;
+          select.value = oldStatus; // Откат, если нажали Отмена
           return;
         }
       }
@@ -519,7 +514,7 @@ function renderItems() {
   }
 }
 
-// ====== ОТРИСОВКА СБОРОК ======
+// ====== ОТРИСОВКА СБОРОК (без изменений) ======
 function renderSets() {
   setsListEl.innerHTML = '';
   setsCountEl.textContent = sets.length;
@@ -735,7 +730,7 @@ function renderSets() {
   }
 }
 
-// ====== ПАНЕЛЬ СБОРКИ ======
+// ====== ПАНЕЛЬ СБОРКИ (без изменений) ======
 function updateBuildPanel() {
   const count = selectedIds.size;
   buildInfo.textContent = `Выбрано: ${count}`;
@@ -765,7 +760,7 @@ btnCreateBuild.onclick = async () => {
   renderItems();
 };
 
-// ====== ДОБАВЛЕНИЕ ТОВАРА ======
+// ====== ДОБАВЛЕНИЕ ТОВАРА (без изменений) ======
 addForm.addEventListener('submit', async e => {
   e.preventDefault();
   try {
@@ -804,7 +799,7 @@ addForm.addEventListener('submit', async e => {
   }
 });
 
-// ====== ФИЛЬТРЫ ======
+// ====== ФИЛЬТРЫ (без изменений) ======
 searchEl.addEventListener('input', renderItems);
 filterCat.addEventListener('change', renderItems);
 filterEl.addEventListener('change', renderItems);
@@ -820,7 +815,7 @@ clearSold.addEventListener('click', async () => {
   }
 });
 
-// ====== БУХГАЛТЕРИЯ ======
+// ====== БУХГАЛТЕРИЯ (без изменений) ======
 function renderAccounting() {
   const balances = { p_1: 0, p_2: 0 };
   let totalDeposited = 0;
