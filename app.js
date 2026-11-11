@@ -969,17 +969,36 @@ document.getElementById('btn-adjust').onclick = () => {
   addTransaction('adjustment');
 };
 
-// ====== СМЕНА ИМЕН ПАРТНЕРОВ ======
-document.getElementById('btn-edit-names').addEventListener('click', async () => {
-  const newP1 = prompt('Имя первого партнера:', PARTNERS.p_1.name);
-  if (newP1 === null) return;
-  const newP2 = prompt('Имя второго партнера:', PARTNERS.p_2.name);
-  if (newP2 === null) return;
+// ====== СМЕНА ИМЕН ПАРТНЕРОВ (МОДАЛКА) ======
+const namesModal = document.getElementById('names-modal');
+const inputP1 = document.getElementById('input-p1');
+const inputP2 = document.getElementById('input-p2');
+
+document.getElementById('btn-edit-names').addEventListener('click', () => {
+  inputP1.value = PARTNERS.p_1.name;
+  inputP2.value = PARTNERS.p_2.name;
+  namesModal.classList.remove('hidden');
+});
+
+document.getElementById('btn-cancel-names').addEventListener('click', () => {
+  namesModal.classList.add('hidden');
+});
+
+document.getElementById('btn-save-names').addEventListener('click', async () => {
+  const newP1 = inputP1.value.trim() || 'Партнер 1';
+  const newP2 = inputP2.value.trim() || 'Партнер 2';
 
   await updateDoc(doc(db, 'groups', currentGroupId), {
-    partner1: newP1.trim() || 'Партнер 1',
-    partner2: newP2.trim() || 'Партнер 2'
+    partner1: newP1,
+    partner2: newP2
   });
+
+  namesModal.classList.add('hidden');
+});
+
+// Закрытие по клику на фон
+namesModal.addEventListener('click', (e) => {
+  if (e.target === namesModal) namesModal.classList.add('hidden');
 });
 
 // ====== ИНИЦИАЛИЗАЦИЯ ======
