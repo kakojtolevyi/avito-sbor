@@ -903,33 +903,6 @@ function renderAccounting() {
     partnersList.appendChild(card);
   });
 
-  // Ищем контейнер, куда вставить кнопку (родительский блок "Участники")
-  const partnersSection = partnersList.parentElement;
-
-  // Удаляем старую кнопку, если она уже была добавлена
-  const oldBtn = document.getElementById('btn-edit-names');
-  if (oldBtn) oldBtn.remove();
-
-  // Создаем новую кнопку отдельно от карточек
-  const settingsBtn = document.createElement('button');
-  settingsBtn.id = 'btn-edit-names';
-  settingsBtn.className = 'btn small ghost';
-  settingsBtn.style.marginTop = '15px';
-  settingsBtn.textContent = '⚙️ Изменить имена партнеров';
-  settingsBtn.onclick = async () => {
-    const newP1 = prompt('Имя первого партнера:', PARTNERS.p_1.name);
-    if (newP1 === null) return;
-    const newP2 = prompt('Имя второго партнера:', PARTNERS.p_2.name);
-    if (newP2 === null) return;
-
-    await updateDoc(doc(db, 'groups', currentGroupId), {
-      partner1: newP1.trim() || 'Партнер 1',
-      partner2: newP2.trim() || 'Партнер 2'
-    });
-  };
-
-  // Вставляем кнопку сразу после контейнера с карточками
-  partnersList.after(settingsBtn);
 
   // Обновляем выпадающий список партнеров
   accPartner.innerHTML = `
@@ -995,6 +968,19 @@ document.getElementById('btn-adjust').onclick = () => {
   if (!accComment.value.trim()) return alert('Для ручной правки обязателен комментарий (причина)');
   addTransaction('adjustment');
 };
+
+// ====== СМЕНА ИМЕН ПАРТНЕРОВ ======
+document.getElementById('btn-edit-names').addEventListener('click', async () => {
+  const newP1 = prompt('Имя первого партнера:', PARTNERS.p_1.name);
+  if (newP1 === null) return;
+  const newP2 = prompt('Имя второго партнера:', PARTNERS.p_2.name);
+  if (newP2 === null) return;
+
+  await updateDoc(doc(db, 'groups', currentGroupId), {
+    partner1: newP1.trim() || 'Партнер 1',
+    partner2: newP2.trim() || 'Партнер 2'
+  });
+});
 
 // ====== ИНИЦИАЛИЗАЦИЯ ======
 applyTheme(localStorage.getItem('avito_theme') || 'light');
