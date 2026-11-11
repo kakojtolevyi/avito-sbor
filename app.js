@@ -3,7 +3,7 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, si
 import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy, updateDoc, arrayUnion, arrayRemove, getDocs, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyALDiPchfhg1tWQXSN9Hs2RyqfHg2hc_4",
+  apiKey: "AIzaSyAlODiPchfhg1tWQXSN9Hs2RyqfHg2hc_4",
   authDomain: "avito-sbor.firebaseapp.com",
   projectId: "avito-sbor",
   storageBucket: "avito-sbor.firebasestorage.app",
