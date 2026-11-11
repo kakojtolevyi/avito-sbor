@@ -878,6 +878,7 @@ function renderAccounting() {
   finInvested.textContent = formatPrice(totalDeposited);
   finWithdrawn.textContent = formatPrice(totalWithdrawn);
 
+  // Отрисовка карточек партнеров
   partnersList.innerHTML = '';
   const totalInvestedByPartners = balances.p_1 + balances.p_2;
 
@@ -902,10 +903,18 @@ function renderAccounting() {
     partnersList.appendChild(card);
   });
 
-  // Кнопка настройки имен
+  // Ищем контейнер, куда вставить кнопку (родительский блок "Участники")
+  const partnersSection = partnersList.parentElement;
+
+  // Удаляем старую кнопку, если она уже была добавлена
+  const oldBtn = document.getElementById('btn-edit-names');
+  if (oldBtn) oldBtn.remove();
+
+  // Создаем новую кнопку отдельно от карточек
   const settingsBtn = document.createElement('button');
+  settingsBtn.id = 'btn-edit-names';
   settingsBtn.className = 'btn small ghost';
-  settingsBtn.style.marginTop = '10px';
+  settingsBtn.style.marginTop = '15px';
   settingsBtn.textContent = '⚙️ Изменить имена партнеров';
   settingsBtn.onclick = async () => {
     const newP1 = prompt('Имя первого партнера:', PARTNERS.p_1.name);
@@ -918,14 +927,17 @@ function renderAccounting() {
       partner2: newP2.trim() || 'Партнер 2'
     });
   };
-  partnersList.appendChild(settingsBtn);
 
-  // Обновляем выпадающий список партнеров в форме транзакций
+  // Вставляем кнопку сразу после контейнера с карточками
+  partnersList.after(settingsBtn);
+
+  // Обновляем выпадающий список партнеров
   accPartner.innerHTML = `
     <option value="p_1">${PARTNERS.p_1.name}</option>
     <option value="p_2">${PARTNERS.p_2.name}</option>
   `;
 
+  // Отрисовка истории операций
   historyList.innerHTML = '';
   historyEmpty.style.display = transactions.length ? 'none' : 'block';
 
