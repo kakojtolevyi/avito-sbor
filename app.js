@@ -973,33 +973,62 @@ document.getElementById('btn-adjust').onclick = () => {
 const namesModal = document.getElementById('names-modal');
 const inputP1 = document.getElementById('input-p1');
 const inputP2 = document.getElementById('input-p2');
+const btnEditNames = document.getElementById('btn-edit-names');
 
-document.getElementById('btn-edit-names').addEventListener('click', () => {
-  inputP1.value = PARTNERS.p_1.name;
-  inputP2.value = PARTNERS.p_2.name;
-  namesModal.classList.remove('hidden');
-});
+// Проверяем, что элементы вообще существуют на странице
+if (btnEditNames && namesModal) {
 
-document.getElementById('btn-cancel-names').addEventListener('click', () => {
-  namesModal.classList.add('hidden');
-});
-
-document.getElementById('btn-save-names').addEventListener('click', async () => {
-  const newP1 = inputP1.value.trim() || 'Партнер 1';
-  const newP2 = inputP2.value.trim() || 'Партнер 2';
-
-  await updateDoc(doc(db, 'groups', currentGroupId), {
-    partner1: newP1,
-    partner2: newP2
+  btnEditNames.addEventListener('click', (e) => {
+    e.preventDefault();
+    inputP1.value = PARTNERS.p_1.name;
+    inputP2.value = PARTNERS.p_2.name;
+    namesModal.classList.remove('hidden');
   });
 
-  namesModal.classList.add('hidden');
-});
+  document.getElementById('btn-cancel-names').addEventListener('click', (e) => {
+    e.preventDefault();
+    namesModal.classList.add('hidden');
+  });
 
-// Закрытие по клику на фон
-namesModal.addEventListener('click', (e) => {
-  if (e.target === namesModal) namesModal.classList.add('hidden');
-});
+  document.getElementById('btn-save-names').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const saveBtn = e.target;
+
+    // Меняем текст кнопки, чтобы показать, что идет сохранение
+    saveBtn.textContent = 'Сохранение...';
+    saveBtn.disabled = true;
+
+    const newP1 = inputP1.value.trim() || 'Партнер 1';
+    const newP2 = inputP2.value.trim() || 'Партнер 2';
+
+    try {
+      // Отправляем в базу
+      await updateDoc(doc(db, 'groups', currentGroupId), {
+        partner1: newP1,
+        partner2: newP2
+      });
+
+      // Обновляем локальные данные
+      PARTNERS.p_1.name = newP1;
+      PARTNERS.p_2.name = newP2;
+
+      // Перерисовываем бухгалтерию
+      renderAccounting();
+      namesModal.classList.add('hidden');
+    } catch (err) {
+      alert('Ошибка сохранения: ' + err.message);
+      console.error(err);
+    } finally {
+      saveBtn.textContent = 'Сохранить';
+      saveBtn.disabled = false;
+    }
+  });
+
+  // Закрытие по клику на фон
+  namesModal.addEventListener('click', (e) => {
+    if (e.target === namesModal) namesModal.classList.add('hidden');
+  });
+}
 
 // ====== ИНИЦИАЛИЗАЦИЯ ======
 applyTheme(localStorage.getItem('avito_theme') || 'light');
